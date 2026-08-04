@@ -1,0 +1,41 @@
+name: release
+
+# Obsidian requires the tag to match manifest.json exactly, with no "v"
+# prefix — so this triggers on 1.2.3, not v1.2.3.
+on:
+  push:
+    tags: ["[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+
+      - name: build
+        run: |
+          npm install
+          npm run build
+
+      - name: check the tag matches manifest.json
+        run: |
+          manifest=$(node -p "require('./manifest.json').version")
+          if [ "$manifest" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match manifest version $manifest"
+            exit 1
+          fi
+
+      # The community store expects these loose on the release, not zipped.
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            main.js
+            manifest.json
+            styles.css
+          generate_release_notes: true
