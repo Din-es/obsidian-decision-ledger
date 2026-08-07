@@ -1,4 +1,21 @@
-import { execFile, type ExecFileException } from "child_process";
+import { execFile } from "child_process";
+
+/**
+ * The shape of `execFile` we actually use.
+ *
+ * Node's own typings are not reliably resolvable in every linting environment,
+ * and when they are not, `execFile` degrades to `any` and every call through it
+ * is reported unsafe. Declaring the narrow signature we depend on keeps this
+ * file fully typed regardless, and documents exactly what is being called.
+ */
+type ExecFile = (
+	file: string,
+	args: readonly string[],
+	options: { cwd: string; windowsHide: boolean; maxBuffer: number },
+	callback: (error: Error | null, stdout: string, stderr: string) => void,
+) => void;
+
+const runProcess = execFile as unknown as ExecFile;
 
 export type Status = "fresh" | "drifted" | "broken";
 
@@ -67,11 +84,11 @@ export class Engine {
 				reject(new EngineError("No ledger binary configured — set it in plugin settings."));
 				return;
 			}
-			execFile(
+			runProcess(
 				this.binary,
 				args,
 				{ cwd: this.repoPath, windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
-				(err: ExecFileException | null, stdout: string, stderr: string) => {
+				(err: Error | null, stdout: string, stderr: string) => {
 					// `verify` exits non-zero by design; list/resolve only do so on
 					// real failure, so surface stderr rather than the exit code.
 					if (err && !stdout.trim()) {

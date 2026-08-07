@@ -143,19 +143,19 @@ export default class DecisionLedgerPlugin extends Plugin {
 	async activateView() {
 		const existing = this.app.workspace.getLeavesOfType(LEDGER_VIEW_TYPE);
 		if (existing.length > 0) {
-			this.app.workspace.revealLeaf(existing[0]);
+			await this.app.workspace.revealLeaf(existing[0]);
 			return;
 		}
 		const leaf = this.app.workspace.getRightLeaf(false);
 		if (!leaf) return;
 		await leaf.setViewState({ type: LEDGER_VIEW_TYPE, active: true });
-		this.app.workspace.revealLeaf(leaf);
+		await this.app.workspace.revealLeaf(leaf);
 	}
 
 	async loadSettings() {
 		const stored: unknown = await this.loadData();
 		const partial = typeof stored === "object" && stored !== null ? stored : {};
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, partial) as LedgerSettings;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, partial);
 	}
 
 	async saveSettings() {
