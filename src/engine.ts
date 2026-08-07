@@ -1,4 +1,4 @@
-import { execFile } from "child_process";
+import { execFile, type ExecFileException } from "child_process";
 
 export type Status = "fresh" | "drifted" | "broken";
 
@@ -41,8 +41,28 @@ export class Engine {
 		return reports.length > 0 ? reports[0] : null;
 	}
 
+	/** Narrows an unknown parsed value to a Report without trusting the CLI. */
+	private static toReport(value: unknown): Report | null {
+		if (typeof value !== "object" || value === null) return null;
+		const v = value as Record<string, unknown>;
+		if (typeof v.id !== "string" || typeof v.file !== "string") return null;
+		const range = Array.isArray(v.range) ? v.range : [];
+		return {
+			id: v.id,
+			title: typeof v.title === "string" ? v.title : undefined,
+			note: typeof v.note === "string" ? v.note : undefined,
+			file: v.file,
+			range: [Number(range[0]) || 0, Number(range[1]) || 0],
+			status: v.status === "fresh" || v.status === "drifted" ? v.status : "broken",
+			confidence: typeof v.confidence === "number" ? v.confidence : 0,
+			renamed: v.renamed === true,
+			boundAt: typeof v.boundAt === "string" ? v.boundAt : "",
+			code: Array.isArray(v.code) ? v.code.map((line) => String(line)) : undefined,
+		};
+	}
+
 	private run(args: string[]): Promise<Report[]> {
-		return new Promise((resolve, reject) => {
+		return new Promise<Report[]>((resolve, reject) => {
 			if (!this.binary) {
 				reject(new EngineError("No ledger binary configured — set it in plugin settings."));
 				return;
@@ -51,19 +71,27 @@ export class Engine {
 				this.binary,
 				args,
 				{ cwd: this.repoPath, windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
-				(err, stdout, stderr) => {
+				(err: ExecFileException | null, stdout: string, stderr: string) => {
 					// `verify` exits non-zero by design; list/resolve only do so on
 					// real failure, so surface stderr rather than the exit code.
 					if (err && !stdout.trim()) {
 						reject(new EngineError(stderr.trim() || err.message));
 						return;
 					}
+					let parsed: unknown;
 					try {
-						const parsed = JSON.parse(stdout || "[]");
-						resolve(Array.isArray(parsed) ? parsed : [parsed]);
+						parsed = JSON.parse(stdout || "[]");
 					} catch {
 						reject(new EngineError(`Could not parse engine output: ${stdout.slice(0, 200)}`));
+						return;
 					}
+					const items: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
+					const reports: Report[] = [];
+					for (const item of items) {
+						const r = Engine.toReport(item);
+						if (r) reports.push(r);
+					}
+					resolve(reports);
 				},
 			);
 		});

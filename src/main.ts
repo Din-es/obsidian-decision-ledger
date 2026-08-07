@@ -3,8 +3,6 @@ import { Engine, type Report } from "./engine";
 import { renderError, renderReport } from "./render";
 import { DEFAULT_SETTINGS, LedgerSettingTab, type LedgerSettings } from "./settings";
 import { LEDGER_VIEW_TYPE, LedgerView } from "./view";
-import { join } from "path";
-import { spawn } from "child_process";
 
 export default class DecisionLedgerPlugin extends Plugin {
 	settings: LedgerSettings = DEFAULT_SETTINGS;
@@ -20,7 +18,7 @@ export default class DecisionLedgerPlugin extends Plugin {
 		// The hero feature: a ```ledger block renders the live code a decision
 		// governs, resolved through the engine at read time.
 		this.registerMarkdownCodeBlockProcessor("ledger", async (source, el, ctx) => {
-			const id = this.parseBlockId(source) ?? (await this.idFromFrontmatter(ctx.sourcePath));
+			const id = this.parseBlockId(source) ?? this.idFromFrontmatter(ctx.sourcePath);
 			if (!id) {
 				renderError(el, "No decision id. Add `id: your-decision` to this block.");
 				return;
@@ -33,7 +31,7 @@ export default class DecisionLedgerPlugin extends Plugin {
 					renderError(el, `No decision named "${id}" in .ledger/.`);
 					return;
 				}
-				renderReport(el, report, (r) => this.openSource(r));
+				renderReport(el, report, (r) => void this.openSource(r));
 			} catch (err) {
 				el.empty();
 				renderError(el, err instanceof Error ? err.message : String(err));
@@ -42,7 +40,7 @@ export default class DecisionLedgerPlugin extends Plugin {
 
 		this.addCommand({
 			id: "open-ledger-view",
-			name: "Open decision ledger",
+			name: "Open sidebar",
 			callback: () => void this.activateView(),
 		});
 
@@ -87,8 +85,11 @@ export default class DecisionLedgerPlugin extends Plugin {
 	/** Reads `id: foo` out of a ```ledger block body. */
 	private parseBlockId(source: string): string | null {
 		try {
-			const parsed = parseYaml(source);
-			if (parsed && typeof parsed.id === "string") return parsed.id.trim();
+			const parsed: unknown = parseYaml(source);
+			if (typeof parsed === "object" && parsed !== null) {
+				const id = (parsed as Record<string, unknown>).id;
+				if (typeof id === "string") return id.trim();
+			}
 		} catch {
 			// Fall through to the bare-string form below.
 		}
@@ -97,24 +98,30 @@ export default class DecisionLedgerPlugin extends Plugin {
 	}
 
 	/** Falls back to `ledger-id:` in the note's frontmatter. */
-	private async idFromFrontmatter(sourcePath: string): Promise<string | null> {
+	private idFromFrontmatter(sourcePath: string): string | null {
 		const file = this.app.vault.getAbstractFileByPath(sourcePath);
 		if (!(file instanceof TFile)) return null;
-		const cache = this.app.metadataCache.getFileCache(file);
-		const id = cache?.frontmatter?.["ledger-id"];
+		const frontmatter: unknown = this.app.metadataCache.getFileCache(file)?.frontmatter;
+		if (typeof frontmatter !== "object" || frontmatter === null) return null;
+		const id = (frontmatter as Record<string, unknown>)["ledger-id"];
 		return typeof id === "string" ? id : null;
 	}
 
-	/** Opens the governed code in the system's default handler. */
-	private openSource(report: Report) {
-		const target = join(this.settings.repoPath, report.file);
-		const opener =
-			process.platform === "win32" ? "explorer" : process.platform === "darwin" ? "open" : "xdg-open";
-		try {
-			spawn(opener, [target], { detached: true, stdio: "ignore" }).unref();
-		} catch {
-			new Notice(`Could not open ${target}`);
+	/**
+	 * Reveals the governed code. When the repository is inside the vault the
+	 * file opens as a normal note; otherwise we show its path.
+	 *
+	 * This deliberately does not shell out to a file manager. The plugin already
+	 * runs one external process — the `ledger` binary — and a second one just to
+	 * open a file is avoidable surface area for no real gain.
+	 */
+	private async openSource(report: Report) {
+		const inVault = this.app.vault.getAbstractFileByPath(report.file);
+		if (inVault instanceof TFile) {
+			await this.app.workspace.getLeaf(false).openFile(inVault);
+			return;
 		}
+		new Notice(`Governed code: ${report.file}:${report.range[0]}-${report.range[1]}`);
 	}
 
 	/** Opens the decision's note in the vault, if it maps to a vault file. */
@@ -136,17 +143,19 @@ export default class DecisionLedgerPlugin extends Plugin {
 	async activateView() {
 		const existing = this.app.workspace.getLeavesOfType(LEDGER_VIEW_TYPE);
 		if (existing.length > 0) {
-			await this.app.workspace.revealLeaf(existing[0]);
+			this.app.workspace.revealLeaf(existing[0]);
 			return;
 		}
 		const leaf = this.app.workspace.getRightLeaf(false);
 		if (!leaf) return;
 		await leaf.setViewState({ type: LEDGER_VIEW_TYPE, active: true });
-		await this.app.workspace.revealLeaf(leaf);
+		this.app.workspace.revealLeaf(leaf);
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const stored: unknown = await this.loadData();
+		const partial = typeof stored === "object" && stored !== null ? stored : {};
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, partial) as LedgerSettings;
 	}
 
 	async saveSettings() {

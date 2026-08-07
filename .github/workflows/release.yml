@@ -8,6 +8,10 @@ on:
 
 permissions:
   contents: write
+  # Needed to sign the built assets so users can verify they came from this
+  # repository. The community store's automated review checks for these.
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -18,9 +22,12 @@ jobs:
         with:
           node-version: "20"
 
+      # `npm ci` builds from the committed lockfile, so the release is
+      # reproducible byte-for-byte rather than picking up whatever versions
+      # happen to resolve on the day.
       - name: build
         run: |
-          npm install
+          npm ci
           npm run build
 
       - name: check the tag matches manifest.json
@@ -30,6 +37,13 @@ jobs:
             echo "tag $GITHUB_REF_NAME does not match manifest version $manifest"
             exit 1
           fi
+
+      - name: attest the built assets
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            styles.css
 
       # The community store expects these loose on the release, not zipped.
       - uses: softprops/action-gh-release@v2
