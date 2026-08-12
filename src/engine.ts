@@ -58,6 +58,19 @@ export class Engine {
 		return reports.length > 0 ? reports[0] : null;
 	}
 
+	/**
+	 * The engine's version string, e.g. `ledger 1.2.1`.
+	 *
+	 * This plugin and the engine ship from different repositories on
+	 * independent version numbers, coupled only by the shape of
+	 * `ledger list --json`. Nothing else confirms the configured binary is
+	 * the engine at all, so the settings tab calls this to fail loudly and
+	 * early rather than showing an empty sidebar and letting the user guess.
+	 */
+	async version(): Promise<string> {
+		return (await this.runRaw(["--version"])).trim();
+	}
+
 	/** Narrows an unknown parsed value to a Report without trusting the CLI. */
 	private static toReport(value: unknown): Report | null {
 		if (typeof value !== "object" || value === null) return null;
@@ -78,8 +91,25 @@ export class Engine {
 		};
 	}
 
-	private run(args: string[]): Promise<Report[]> {
-		return new Promise<Report[]>((resolve, reject) => {
+	private async run(args: string[]): Promise<Report[]> {
+		const stdout = await this.runRaw(args);
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(stdout || "[]");
+		} catch {
+			throw new EngineError(`Could not parse engine output: ${stdout.slice(0, 200)}`);
+		}
+		const items: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
+		const reports: Report[] = [];
+		for (const item of items) {
+			const r = Engine.toReport(item);
+			if (r) reports.push(r);
+		}
+		return reports;
+	}
+
+	private runRaw(args: string[]): Promise<string> {
+		return new Promise<string>((resolve, reject) => {
 			if (!this.binary) {
 				reject(new EngineError("No ledger binary configured — set it in plugin settings."));
 				return;
@@ -87,7 +117,9 @@ export class Engine {
 			runProcess(
 				this.binary,
 				args,
-				{ cwd: this.repoPath, windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
+				// `.` rather than "" so the version probe works before a repo is
+				// configured — it is the check that tells you what to configure.
+				{ cwd: this.repoPath || ".", windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
 				(err: Error | null, stdout: string, stderr: string) => {
 					// `verify` exits non-zero by design; list/resolve only do so on
 					// real failure, so surface stderr rather than the exit code.
@@ -95,20 +127,7 @@ export class Engine {
 						reject(new EngineError(stderr.trim() || err.message));
 						return;
 					}
-					let parsed: unknown;
-					try {
-						parsed = JSON.parse(stdout || "[]");
-					} catch {
-						reject(new EngineError(`Could not parse engine output: ${stdout.slice(0, 200)}`));
-						return;
-					}
-					const items: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
-					const reports: Report[] = [];
-					for (const item of items) {
-						const r = Engine.toReport(item);
-						if (r) reports.push(r);
-					}
-					resolve(reports);
+					resolve(stdout);
 				},
 			);
 		});

@@ -81,6 +81,7 @@
   margin-bottom: 0.5rem;
 }
 .ledger-empty { color: var(--text-muted); font-size: 0.85rem; }
+.ledger-empty p { margin: 0 0 0.5rem; }
 .ledger-list { display: flex; flex-direction: column; gap: 2px; }
 .ledger-row {
   display: flex;
@@ -92,3 +93,30 @@
 }
 .ledger-row:hover { background: var(--background-modifier-hover); }
 .ledger-row-main { min-width: 0; flex: 1; }
+
+/* Settings tab: the orientation block and the engine connectivity check. */
+.ledger-intro {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.ledger-intro p { margin: 0 0 0.6rem; }
+.ledger-intro ul { margin: 0 0 0.6rem; padding-left: 1.2rem; }
+.ledger-intro li { margin-bottom: 0.4rem; }
+.ledger-intro strong { color: var(--text-normal); }
+.ledger-intro code {
+  font-family: var(--font-monospace);
+  font-size: 0.8em;
+}
+
+.ledger-engine-status {
+  flex-basis: 100%;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  font-family: var(--font-monospace);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.ledger-engine-status:empty { display: none; }
+.ledger-engine-ok { color: var(--color-green); }
+.ledger-engine-bad { color: var(--color-red); }

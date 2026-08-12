@@ -72,9 +72,33 @@ work on Obsidian mobile.
 ledger bind src/auth/retry.go:11-14 --note jitter-backoff --title "Jittered backoff"
 ```
 
+4. Back in settings, press **Check the engine**. It runs the binary and reports
+   the version that answered, so a wrong path fails there rather than as a
+   silently empty sidebar.
+
 **Tip:** the cleanest setup is keeping your notes *inside* the repository, so
 vault paths and repo paths are the same thing. A separate vault works, but you
 will be mapping paths by hand.
+
+## Where this plugin fits
+
+This is the **authoring** surface, and on its own it *reports* drift without
+ever preventing it. There are two others, and you want all three:
+
+| Surface | Direction | What it gives you |
+|---|---|---|
+| **Obsidian** — this plugin | note → code | Write down why, and see the live code a decision governs while you read the note |
+| **VS Code** — [Decision Anchors](https://marketplace.visualstudio.com/items?itemName=Din-es.decision-anchors) | code → note | Reading unfamiliar code, ask which decision governs this line |
+| **git** — `ledger verify` in CI | enforcement | A pull request that changes governed code without revisiting its note fails the build |
+
+Only the CI gate actually *prevents* rot — the other two make it visible. If you
+set up one more thing after this plugin, make it the gate;
+[`ledger init`](https://github.com/Din-es/Ledger_c/blob/main/GETTING_STARTED.md)
+scaffolds the workflow for you.
+
+> The VS Code extension is listed as **Decision Anchors** rather than Decision
+> Ledger because Marketplace extension names are globally unique and that one
+> was taken. Same project.
 
 ## Commands
 

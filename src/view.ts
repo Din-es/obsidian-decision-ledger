@@ -64,9 +64,13 @@ export class LedgerView extends ItemView {
 		}
 		if (this.loading && this.reports.length === 0) return;
 		if (this.reports.length === 0) {
-			root.createDiv({
-				cls: "ledger-empty",
-				text: "No decisions recorded yet. Bind one with `ledger bind`.",
+			// Two very different causes look identical from here — nothing bound
+			// yet, or pointed at the wrong repo — so name both rather than
+			// leaving the reader to guess which one they are looking at.
+			const empty = root.createDiv({ cls: "ledger-empty" });
+			empty.createEl("p", { text: "No decisions found in this repository." });
+			empty.createEl("p", {
+				text: "Either none have been bound yet, or the repository path in plugin settings points somewhere without a .ledger/ directory.",
 			});
 			return;
 		}
